@@ -2,6 +2,8 @@
 
 An intelligent Conversational Retrieval-Augmented Generation (RAG) application that allows users to ask natural language questions about any public GitHub repository. The application clones a repository, indexes its source code and documentation, and provides accurate, source-grounded answers using Large Language Models (LLMs).
 
+This was developed by YAKKALA LAKSHMI CHARAN, a student from RGUKT nuzvid
+
 ---
 
 🚀 Features
