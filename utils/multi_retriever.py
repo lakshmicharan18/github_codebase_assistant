@@ -8,7 +8,9 @@ def get_unique_documents(documents):
     for doc in documents:
         source = doc.metadata.get("source", "")
         chunk_id = doc.metadata.get("chunk_id", "")
-        key = f"{source}-{chunk_id}"
+        content_preview = doc.page_content[:100]
+
+        key = f"{source}-{chunk_id}-{content_preview}"
 
         if key not in seen:
             seen.add(key)
@@ -17,148 +19,161 @@ def get_unique_documents(documents):
     return unique_docs
 
 
+def retrieve_readme_first(vector_db, question, k=4):
+    readme_retriever = vector_db.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": k,
+            "filter": {"file_type": "readme"}
+        }
+    )
+
+    return readme_retriever.invoke(question)
+
+
+def retrieve_documentation(vector_db, question, k=4):
+    docs_retriever = vector_db.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": k,
+            "filter": {"file_type": "documentation"}
+        }
+    )
+
+    return docs_retriever.invoke(question)
+
+
+def retrieve_repo_structure(vector_db, question, k=3):
+    repo_structure_retriever = vector_db.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": k,
+            "filter": {"file_type": "repo_structure"}
+        }
+    )
+
+    return repo_structure_retriever.invoke(question)
+
+
+def retrieve_source_code(vector_db, question, k=8):
+    source_retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": k,
+            "fetch_k": 30,
+            "filter": {"file_type": "source_code"}
+        }
+    )
+
+    return source_retriever.invoke(question)
+
+
+def retrieve_tests(vector_db, question, k=8):
+    test_retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": k,
+            "fetch_k": 30,
+            "filter": {"file_type": "test"}
+        }
+    )
+
+    return test_retriever.invoke(question)
+
+
+def retrieve_configuration(vector_db, question, k=8):
+    config_retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": k,
+            "fetch_k": 30,
+            "filter": {"file_type": "configuration"}
+        }
+    )
+
+    return config_retriever.invoke(question)
+
+
+def retrieve_dependencies(vector_db, question, k=8):
+    dependency_retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": k,
+            "fetch_k": 30,
+            "filter": {"file_type": "dependency"}
+        }
+    )
+
+    return dependency_retriever.invoke(question)
+
+
+def retrieve_license(vector_db, question, k=5):
+    license_retriever = vector_db.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": k,
+            "filter": {"file_type": "license"}
+        }
+    )
+
+    return license_retriever.invoke(question)
+
+
+def retrieve_general(vector_db, question, k=12):
+    general_retriever = vector_db.as_retriever(
+        search_type="mmr",
+        search_kwargs={
+            "k": k,
+            "fetch_k": 40
+        }
+    )
+
+    return general_retriever.invoke(question)
+
+
+def sort_documents_by_priority(documents):
+    return sorted(
+        documents,
+        key=lambda doc: doc.metadata.get("file_priority", 10)
+    )
+
+
 def multi_retrieve(vector_db, question, category):
     retrieved_docs = []
 
     if category == "architecture":
-        repo_structure_retriever = vector_db.as_retriever(
-            search_type="similarity",
-            search_kwargs={
-                "k": 3,
-                "filter": {"file_type": "repo_structure"}
-            }
-        )
-
-        readme_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 3,
-                "fetch_k": 15,
-                "filter": {"file_type": "readme"}
-            }
-        )
-
-        docs_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 3,
-                "fetch_k": 15,
-                "filter": {"file_type": "documentation"}
-            }
-        )
-
-        retrieved_docs.extend(repo_structure_retriever.invoke(question))
-        retrieved_docs.extend(readme_retriever.invoke(question))
-        retrieved_docs.extend(docs_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_repo_structure(vector_db, question, k=3))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=4))
+        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=4))
 
     elif category == "overview":
-        readme_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 4,
-                "fetch_k": 20,
-                "filter": {"file_type": "readme"}
-            }
-        )
-
-        docs_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 3,
-                "fetch_k": 15,
-                "filter": {"file_type": "documentation"}
-            }
-        )
-
-        retrieved_docs.extend(readme_retriever.invoke(question))
-        retrieved_docs.extend(docs_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=6))
+        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=3))
 
     elif category == "implementation":
-        source_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 8,
-                "fetch_k": 30,
-                "filter": {"file_type": "source_code"}
-            }
-        )
-
-        docs_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 3,
-                "fetch_k": 15,
-                "filter": {"file_type": "documentation"}
-            }
-        )
-
-        retrieved_docs.extend(source_retriever.invoke(question))
-        retrieved_docs.extend(docs_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_source_code(vector_db, question, k=8))
+        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=3))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=2))
 
     elif category == "testing":
-        test_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 8,
-                "fetch_k": 30,
-                "filter": {"file_type": "test"}
-            }
-        )
-
-        retrieved_docs.extend(test_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_tests(vector_db, question, k=8))
+        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=2))
 
     elif category == "configuration":
-        config_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 8,
-                "fetch_k": 30,
-                "filter": {"file_type": "configuration"}
-            }
-        )
-
-        retrieved_docs.extend(config_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_configuration(vector_db, question, k=8))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=2))
 
     elif category == "dependency":
-        dependency_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 8,
-                "fetch_k": 30,
-                "filter": {"file_type": "dependency"}
-            }
-        )
-
-        retrieved_docs.extend(dependency_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_dependencies(vector_db, question, k=8))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=2))
 
     elif category == "license":
-        license_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 5,
-                "fetch_k": 20,
-                "filter": {"file_type": "license"}
-            }
-        )
-
-        retrieved_docs.extend(license_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_license(vector_db, question, k=5))
 
     else:
-        general_retriever = vector_db.as_retriever(
-            search_type="mmr",
-            search_kwargs={
-                "k": 12,
-                "fetch_k": 40
-            }
-        )
-
-        retrieved_docs.extend(general_retriever.invoke(question))
+        retrieved_docs.extend(retrieve_general(vector_db, question, k=12))
 
     unique_docs = get_unique_documents(retrieved_docs)
+    sorted_docs = sort_documents_by_priority(unique_docs)
 
-    unique_docs = sorted(
-        unique_docs,
-        key=lambda doc: doc.metadata.get("file_priority", 10)
-    )
-
-    return unique_docs[:10]
+    return sorted_docs[:20]

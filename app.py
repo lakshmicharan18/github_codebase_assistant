@@ -118,5 +118,6 @@ if user_question:
                     st.write("📄 File:", doc.metadata.get("source"))
                     st.write("📂 Type:", doc.metadata.get("file_type"))
                     st.write("⭐ Priority:", doc.metadata.get("file_priority"))
+                    st.write("Reranker Score:", round(doc.metadata.get("reranker_score", 0), 4))
                     st.code(doc.page_content[:1200])
                     st.write("--------")

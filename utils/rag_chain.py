@@ -5,9 +5,11 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from utils.query_router import route_question
 from utils.multi_retriever import multi_retrieve
+from utils.reranker import DocumentReranker
 
 load_dotenv()
 
+reranker = DocumentReranker()
 
 def format_documents(docs):
     context_text = ""
@@ -35,11 +37,17 @@ def create_rag_chain(vector_db, groq_api_key, question, chat_history_text=""):
     )
 
     category = route_question(question, groq_api_key)
-
-    retrieved_docs = multi_retrieve(
+    
+    candidate_docs = multi_retrieve(
         vector_db=vector_db,
         question=question,
         category=category
+    )
+
+    retrieved_docs = reranker.rerank(
+        question=question,
+        documents=candidate_docs,
+        top_k = 6
     )
 
     context_text = format_documents(retrieved_docs)
@@ -62,7 +70,8 @@ def create_rag_chain(vector_db, groq_api_key, question, chat_history_text=""):
         3. If line numbers are visible in the context, mention them when useful.
         4. If the question is about architecture, prioritize AUTO_GENERATED_REPO_STRUCTURE.
         5. If the question is about what the project is, prioritize README.
-        6. If the context gives partial information, clearly say it is a partial answer.
+        6. If the retrieved context clearly answers the question, answer directly without saying it is partial.
+Only say "partial answer" when important requested details are missing.
         7. If the answer is not present in the retrieved context, say:
            "I don't know from this codebase."
         8. Do not make assumptions outside the retrieved context.
