@@ -1,12 +1,12 @@
-💻 GitHub Codebase Assistant
+# 💻 GitHub Codebase Assistant
 
-An intelligent Conversational Retrieval-Augmented Generation (RAG) application that allows users to ask natural language questions about any public GitHub repository. The application clones a repository, indexes its source code and documentation, and provides accurate, source-grounded answers using Large Language Models (LLMs).
+An intelligent Conversational Retrieval-Augmented Generation (RAG) application that allows users to ask natural language questions about any public GitHub repository. The application clones a repository, indexes its source code and documentation, retrieves and **reranks** the most relevant chunks, and provides accurate, source-grounded answers using Large Language Models (LLMs).
 
-This was developed by YAKKALA LAKSHMI CHARAN, a student from RGUKT nuzvid
+This was developed by **YAKKALA LAKSHMI CHARAN**, a student from RGUKT Nuzvid.
 
 ---
 
-🚀 Features
+## 🚀 Features
 
 - Clone and process any public GitHub repository
 - Intelligent code and documentation indexing
@@ -16,73 +16,81 @@ This was developed by YAKKALA LAKSHMI CHARAN, a student from RGUKT nuzvid
 - LLM-powered Query Routing
 - Conversational Question Rewriting
 - Multi-Retriever Architecture
+- **Cross-Encoder Reranking of retrieved chunks**
 - Auto-generated Repository Structure
 - Source-aware Answers with File References
 - Interactive Streamlit Chat Interface
 
 ---
 
-🏗️ System Architecture
+## 🏗️ System Architecture
 
-                    GitHub Repository URL
-                              │
-                              ▼
-                     Clone Repository
-                              │
-                              ▼
-                    Load Repository Files
-                              │
-                              ▼
-                Generate Repository Structure
-                              │
-                              ▼
-              Code & Documentation Chunking
-                              │
-                              ▼
-                  Generate Vector Embeddings
-                              │
-                              ▼
-                     Store in ChromaDB
-                              │
-                              ▼
-                     User Asks Question
-                              │
-                              ▼
-                 Question Rewriting (LLM)
-                              │
-                              ▼
-                   Query Router (LLM)
-                              │
-                              ▼
-                  Multi-Retriever Search
-                              │
-             ┌──────────┬──────────┬──────────┐
-             │          │          │          │
-             ▼          ▼          ▼          ▼
-         README      Source     Docs      Repo Structure
-        Retriever   Retriever Retriever    Retriever
-             │          │          │          │
-             └──────────┴──────────┴──────────┘
-                              │
-                              ▼
-                  Merge Retrieved Documents
-                              │
-                              ▼
-                  Remove Duplicate Chunks
-                              │
-                              ▼
-                    Sort by File Priority
-                              │
-                              ▼
-                   Groq LLM Generates Answer
-                              │
-                              ▼
-                  Answer with Source Citations
+```
+            GitHub Repository URL
+                      │
+                      ▼
+             Clone Repository
+                      │
+                      ▼
+            Load Repository Files
+                      │
+                      ▼
+        Generate Repository Structure
+                      │
+                      ▼
+      Code & Documentation Chunking
+                      │
+                      ▼
+          Generate Vector Embeddings
+                      │
+                      ▼
+             Store in ChromaDB
+                      │
+                      ▼
+             User Asks Question
+                      │
+                      ▼
+         Question Rewriting (LLM)
+                      │
+                      ▼
+           Query Router (LLM)
+                      │
+                      ▼
+          Multi-Retriever Search
+                      │
+     ┌──────────┬──────────┬──────────┐
+     │          │          │          │
+     ▼          ▼          ▼          ▼
+ README      Source     Docs      Repo Structure
+Retriever   Retriever Retriever    Retriever
+     │          │          │          │
+     └──────────┴──────────┴──────────┘
+                      │
+                      ▼
+          Merge Retrieved Documents
+                      │
+                      ▼
+          Remove Duplicate Chunks
+                      │
+                      ▼
+        Cross-Encoder Reranking
+                      │
+                      ▼
+            Sort by Reranker Score
+             (with File Priority)
+                      │
+                      ▼
+           Groq LLM Generates Answer
+                      │
+                      ▼
+          Answer with Source Citations
+```
 
 ---
 
-📂 Project Structure
+## 📂 Project Structure
 
+```
 github-codebase-assistant/
 │
 ├── app.py
@@ -94,6 +102,7 @@ github-codebase-assistant/
 │   ├── query_router.py
 │   ├── question_rewriter.py
 │   ├── multi_retriever.py
+│   ├── reranker.py          # cross-encoder reranking of retrieved chunks
 │   └── rag_chain.py
 │
 ├── chroma_db/
@@ -103,247 +112,144 @@ github-codebase-assistant/
 ├── requirements.txt
 │
 └── README.md
+```
+
+> Note: `reranker.py` is listed based on the reranking behavior visible in `app.py` (each source chunk now carries a `reranker_score`). If you named the module differently, update this section accordingly.
 
 ---
 
-⚙️ Tech Stack
+## ⚙️ Tech Stack
 
-Programming Language
-
+**Programming Language**
 - Python
 
-LLM
-
+**LLM**
 - Groq
 - Llama 3.3 70B Versatile
 
-Frameworks
-
+**Frameworks**
 - LangChain
 - Streamlit
 
-Vector Database
-
+**Vector Database**
 - ChromaDB
 
-Embedding Model
-
+**Embedding Model**
 - sentence-transformers/all-MiniLM-L6-v2
 
-Version Control
+**Reranking Model**
+- Cross-Encoder via `sentence-transformers` (e.g. `cross-encoder/ms-marco-MiniLM-L-6-v2`)
+- *(confirm/replace with the exact model you're using)*
 
+**Version Control**
 - Git
 - GitHub
 
 ---
 
-🔄 Workflow
+## 🔄 Workflow
 
-Step 1
-
+**Step 1 — Repository Input**
 The user enters a public GitHub repository URL.
+Example: `https://github.com/pallets/flask`
 
-Example:
-
-https://github.com/pallets/flask
-
----
-
-Step 2
-
+**Step 2 — Clone**
 The repository is cloned locally.
 
----
+**Step 3 — File Scanning**
+The application scans all supported files including Python, JavaScript, TypeScript, Java, Markdown, YAML, JSON, and TOML — while ignoring unnecessary folders like `.git`, `node_modules`, `venv`, `build`, and `dist`.
 
-Step 3
+**Step 4 — Metadata Enrichment**
+Each file is enriched with metadata such as File Name, File Type, File Extension, and File Priority.
 
-The application scans all supported files including
-
-- Python
-- JavaScript
-- TypeScript
-- Java
-- Markdown
-- YAML
-- JSON
-- TOML
-
-while ignoring unnecessary folders like
-
-- .git
-- node_modules
-- venv
-- build
-- dist
-
----
-
-Step 4
-
-Each file is enriched with metadata such as
-
-- File Name
-- File Type
-- File Extension
-- File Priority
-
----
-
-Step 5
-
+**Step 5 — Repository Structure Generation**
 A repository structure document is automatically generated to improve architecture-related queries.
 
----
+**Step 6 — Chunking**
+Files are split intelligently. Source code and documentation use different chunking strategies to preserve semantic meaning.
 
-Step 6
-
-Files are split intelligently.
-
-Source code and documentation use different chunking strategies to preserve semantic meaning.
-
----
-
-Step 7
-
+**Step 7 — Embedding**
 Each chunk is converted into vector embeddings using Hugging Face Embeddings.
 
----
-
-Step 8
-
+**Step 8 — Storage**
 The embeddings are stored in ChromaDB.
 
----
+**Step 9 — User Question**
+The user asks a question. Example: *"How are routes implemented?"*
 
-Step 9
-
-The user asks a question.
-
-Example:
-
-How are routes implemented?
-
----
-
-Step 10
-
+**Step 10 — Question Rewriting**
 If the question is conversational, the Question Rewriter converts it into a standalone question.
+Before: *"Explain that simply."*
+After: *"Explain how routes are implemented in simple words."*
 
-Example
+**Step 11 — Query Routing**
+The Query Router classifies the question into one of the following categories: Overview, Architecture, Implementation, Testing, Configuration, Dependency, License, General.
 
-Before
-
-Explain that simply.
-
-After
-
-Explain how routes are implemented in simple words.
-
----
-
-Step 11
-
-The Query Router classifies the question into one of the following categories.
-
-- Overview
-- Architecture
-- Implementation
-- Testing
-- Configuration
-- Dependency
-- License
-- General
-
----
-
-Step 12
-
+**Step 12 — Multi-Retriever Search**
 The Multi-Retriever retrieves relevant information from multiple sources depending on the question category.
+- Architecture questions retrieve from: Repository Structure, README, Documentation
+- Implementation questions retrieve from: Source Code, Documentation
 
-For example,
+**Step 13 — Merge & Deduplicate**
+The retrieved documents are merged and deduplicated.
 
-Architecture questions retrieve from
+**Step 14 — Reranking**
+Each surviving chunk is scored by a **cross-encoder reranker** against the (rewritten) question, producing a `reranker_score`. This re-orders results by actual relevance rather than raw vector-similarity alone, correcting cases where embedding search alone would surface a superficially similar but less useful chunk.
 
-- Repository Structure
-- README
-- Documentation
+**Step 15 — Priority-Aware Sorting**
+The reranked documents are sorted using a combination of reranker score and file priority before being passed to the LLM.
 
-Implementation questions retrieve from
-
-- Source Code
-- Documentation
-
----
-
-Step 13
-
-The retrieved documents are
-
-- Merged
-- Deduplicated
-- Sorted by priority
-
-before being passed to the LLM.
+**Step 16 — Answer Generation**
+The Groq LLM (Llama 3.3 70B Versatile) generates a response using only the retrieved, reranked repository context, and returns a source-aware answer.
 
 ---
 
-Step 14
+## ✨ Example Questions
 
-The Groq LLM generates a response using only the retrieved repository context and returns source-aware answers.
-
----
-
-✨ Example Questions
-
-Overview
-
+**Overview**
 - What is Flask?
 - What problem does this project solve?
 - Explain this project.
 
-Architecture
-
+**Architecture**
 - Explain the project architecture.
 - Explain the folder structure.
 - What are the main modules?
 
-Implementation
-
+**Implementation**
 - How are routes implemented?
 - Where is Session defined?
 - Explain this function.
 
-Configuration
-
+**Configuration**
 - How is the project configured?
 - Where are environment variables defined?
 
-Dependency
-
+**Dependency**
 - Which libraries are required?
 - What packages does this project use?
 
 ---
 
-🌟 Key Features
+## 🌟 Key Features
 
 - Conversational RAG
 - Semantic Search
 - LLM-based Query Routing
 - Multi-Retriever Architecture
+- **Cross-Encoder Reranking**
 - Repository Structure Generation
 - Source-aware Responses
 - Metadata-aware Retrieval
 - Duplicate Removal
-- Priority-based Context Selection
+- Priority + Relevance-based Context Selection
 
 ---
 
-📈 Future Enhancements
+## 📈 Future Enhancements
 
 - Parent-Child Retrieval
 - Hybrid Search (BM25 + Vector Search)
-- LLM-based Reranking
 - Repository Summarization
 - Mermaid Architecture Diagram Generation
 - Cross-file Execution Tracing
@@ -353,15 +259,14 @@ Dependency
 
 ---
 
-👨‍💻 Author
+## 👨‍💻 Author
 
-Lakshmi Charan Yakkala
-
+**Lakshmi Charan Yakkala**
 - GitHub: https://github.com/lakshmicharan18
 - LinkedIn: https://www.linkedin.com/in/charan-yakkala-95bbb8318/
 
 ---
 
-📄 License
+## 📄 License
 
 This project is intended for educational and learning purposes.
