@@ -10,3 +10,4 @@ chromadb
 GitPython
 sentence-transformers
 langchain-text-splitters
+requests

@@ -1,0 +1,46 @@
+question,expected,predicted,correct
+What is this project?,overview,overview,True
+Give me a summary of what this repo does.,overview,overview,True
+What problem does this project solve?,overview,overview,True
+Can you explain this codebase in simple terms?,overview,overview,True
+Why would someone use this?,overview,overview,True
+Explain the project architecture.,architecture,architecture,True
+What are the main folders and what do they contain?,architecture,architecture,True
+How is the codebase organized?,architecture,architecture,True
+What are the major modules and how do they connect?,architecture,architecture,True
+Walk me through the high-level design of this system.,architecture,architecture,True
+How are routes implemented in this project?,implementation,implementation,True
+Where is the main function defined?,implementation,implementation,True
+Explain how the retry logic works.,implementation,implementation,True
+What does the process_data function do?,implementation,implementation,True
+How is authentication handled in the code?,implementation,implementation,True
+Are there any unit tests for this?,testing,testing,True
+How do I run the test suite?,testing,testing,True
+What testing framework is used?,testing,testing,True
+Is there test coverage for the API endpoints?,testing,testing,True
+Where are the pytest fixtures defined?,testing,testing,True
+How do I configure this project?,configuration,configuration,True
+What environment variables does this need?,configuration,configuration,True
+Is there a Docker setup?,configuration,configuration,True
+Where are the settings defined?,configuration,configuration,True
+How do I set this up locally?,configuration,configuration,True
+What libraries does this project use?,dependency,dependency,True
+What version of Python is required?,dependency,dependency,True
+What are the dependencies listed in requirements.txt?,dependency,dependency,True
+Does this use any external APIs or SDKs?,dependency,dependency,True
+What packages need to be installed?,dependency,dependency,True
+What license does this project use?,license,license,True
+Can I use this code commercially?,license,license,True
+Is this open source?,license,license,True
+What are the usage restrictions on this repo?,license,license,True
+Am I allowed to redistribute this code?,license,license,True
+recheck that,general,general,True
+"thanks, that's helpful",general,general,True
+What's the weather like today?,general,general,True
+Can you write me a poem about this repo?,general,general,True
+hi,general,general,True
+How does the project structure affect testing strategy?,architecture,testing,False
+Which config file controls the test environment?,configuration,configuration,True
+What does the README say about installation?,overview,configuration,False
+Is pytest a dependency or a dev tool only?,dependency,dependency,True
+Explain how the Docker config ties into the folder layout.,configuration,architecture,False

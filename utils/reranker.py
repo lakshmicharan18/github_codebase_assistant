@@ -1,3 +1,4 @@
+import streamlit as st
 from sentence_transformers import CrossEncoder
 from langchain_core.documents import Document
 
@@ -37,3 +38,13 @@ class DocumentReranker:
         )
 
         return scored_documents[:top_k]
+
+
+@st.cache_resource(show_spinner="Loading reranker model...")
+def get_reranker():
+    """
+    Returns a cached DocumentReranker instance, shared across all sessions
+    in this server process. Loading the cross-encoder is slow, so we want
+    exactly one instance per process, not one per import or per session.
+    """
+    return DocumentReranker()

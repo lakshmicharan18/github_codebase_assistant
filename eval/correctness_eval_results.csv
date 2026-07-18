@@ -1,0 +1,56 @@
+question,category,score,contradicted_count,answer
+Who built this project?,overview,2/2,0,"The project was built by **Lakshmi Charan Yakkala**, also known as **YAKKALA LAKSHMI CHARAN**, a student from RGUKT Nuzvid. You can find more information about the author in the `README.md` file, specifically at lines 263-266. The author's GitHub profile is https://github.com/lakshmicharan18 and LinkedIn profile is https://www.linkedin.com/in/charan-yakkala-95bbb8318/."
+What problem does this project solve?,overview,2/2,0,"This project solves the problem of providing accurate and source-grounded answers to natural language questions about any public GitHub repository. It does this by cloning a repository, indexing its source code and documentation, retrieving and reranking the most relevant chunks, and generating answers using Large Language Models (LLMs). 
+
+You can find more information about the project in the README.md file, specifically in the introduction section (Source 4, lines 1-6). The project's features and architecture are also explained in the README.md file (Source 4, lines 9-24 and Source 5, lines 26-87)."
+What vector database does this project use?,dependency,1/1,0,"The project uses ChromaDB as its vector database, as mentioned in the README.md file (Source 2, line 15)."
+What embedding approach is used for semantic search?,implementation,1/1,0,"The embedding approach used for semantic search is based on the Hugging Face Embeddings, specifically the ""sentence-transformers/all-MiniLM-L6-v2"" model, as mentioned in the `utils/vector_store.py` file (lines 10-11) and `utils/vector_store.py` file (lines 20-22). This model is used to convert text into vector embeddings, which are then stored in a ChromaDB database for efficient semantic search."
+"Does this project rerank retrieved documents, and how?",implementation,1/1,0,"This project does rerank retrieved documents. The reranking process is performed by the `DocumentReranker` class, which is defined in the `utils/reranker.py` file (lines 8-39). 
+
+The `DocumentReranker` class uses a cross-encoder model (specifically, the ""cross-encoder/ms-marco-MiniLM-L6-v2"" model, as defined on line 5 of `utils/reranker.py`) to score the retrieved documents based on their relevance to the user's question. 
+
+The reranking process involves the following steps:
+1. The `multi_retrieve` function in `utils/multi_retriever.py` retrieves a list of documents based on the user's question and category.
+2. The `rerank` method in `utils/reranker.py` takes the retrieved documents and the user's question as input, and returns a list of documents sorted by their relevance to the question.
+3. The sorted documents are then passed to the `format_documents` function in `utils/rag_chain.py`, which formats the documents into a context text that can be used by the Groq LLM to generate an answer.
+
+The project uses the `CrossEncoder` model from the `sentence_transformers` library to perform the reranking, as seen on line 1 of `utils/reranker.py`. The `rerank` method is called in the `create_rag_chain` function in `utils/rag_chain.py` (lines 47-51), which creates a chain of functions to generate an answer to the user's question. 
+
+In the `README.md` file (lines 196-200), the project describes the reranking process as ""Step 14 — Reranking"" and ""Step 15 — Priority-Aware Sorting"", where each surviving chunk is scored by a cross-encoder reranker against the rewritten question, and the reranked documents are sorted using a combination of reranker score and file priority."
+What LLM model is used to generate the final answer?,implementation,1/1,0,The LLM model used to generate the final answer is the Groq LLM (Llama 3.3 70B Versatile). This information can be found in `README.md` at line 203 and in `utils/query_router.py` at line 21.
+What is the license of this project?,license,1/1,0,"The license of this project is not explicitly stated in the retrieved context, but it is mentioned in `README.md` (line 270-272) that ""This project is intended for educational and learning purposes."" However, there is no specific license mentioned. 
+
+I don't know the exact license from this codebase."
+What file types does this project index from a repository?,implementation,0/2,0,"The project indexes the following file types from a repository: source code, readme, and docs. This information can be found in the `utils/rag_chain.py` file at lines 158-161. 
+
+In the `utils/rag_chain.py` file, the `retriever` is defined with a filter that includes files with types ""source_code"", ""readme"", and ""docs"". 
+
+Additionally, in the `utils/repo_loader.py` file, the `load_code_files` function loads files with extensions specified in the `ALLOWED_EXTENSIONS` variable, but the exact extensions are not specified in the provided context. 
+
+However, the `get_file_type` function in the `utils/repo_loader.py` file suggests that the project can handle different file types, including source code and other types, but the exact types are not specified. 
+
+The project also handles files based on their priority, which is determined by the `get_file_priority` function in the `utils/repo_loader.py` file. 
+
+For more information on the file types and priorities, you can refer to the `utils/repo_loader.py` file."
+Which folders are ignored when scanning a repository?,configuration,3/3,0,"The folders that are ignored when scanning a repository are listed in the README.md file (lines 159-160). These folders include `.git`, `node_modules`, `venv`, `build`, and `dist`."
+Does the project rewrite user questions before retrieving answers?,implementation,1/1,0,"The project rewrites user questions before retrieving answers. This is done in the `utils/question_rewriter.py` file (lines 6-54), where the `rewrite_question` function takes the user's question, chat history, and Groq API key as input. It uses a language model to rewrite the question into a standalone question if necessary. 
+
+In the `app.py` file (lines 73-78), after the user asks a question, the `rewrite_question` function is called to rewrite the question before generating an answer. 
+
+The rewriting process is also mentioned in the `README.md` file (lines 180-184), where it describes the question rewriting step as converting conversational questions into standalone questions. 
+
+For example, if the user asks ""Explain that simply"", the question rewriter will convert it into ""Explain how routes are implemented in simple words""."
+"Is hybrid search (BM25 + vector search) currently implemented, or planned?",implementation,1/1,0,"To answer whether hybrid search (BM25 + vector search) is currently implemented or planned, we can look at the `README.md` file (File: README.md, Type: readme, Priority: 1) in the context provided.
+
+In the `README.md` file, under the section `## 📈 Future Enhancements` (starting from line 250), we can see a list of future enhancements planned for the project. Specifically, on line 252, it mentions `- Hybrid Search (BM25 + Vector Search)` as one of the future enhancements.
+
+There is no indication in the provided context that hybrid search (BM25 + vector search) is currently implemented. The mention of it under future enhancements suggests that it is planned but not yet implemented.
+
+Therefore, based on the information available in the context, hybrid search (BM25 + vector search) is planned but not currently implemented."
+How does the system decide which retrieval strategy to use for a question?,implementation,2/2,0,"The system decides which retrieval strategy to use for a question based on the category of the question. This is determined by the `route_question` function in `utils/query_router.py` (lines 18-80). The function uses a large language model (LLM) to classify the question into one of the following categories: overview, architecture, implementation, testing, configuration, dependency, license, or general.
+
+The `multi_retrieve` function in `utils/multi_retriever.py` (lines 141-158) then uses the category to determine which retrieval strategy to use. For example, if the category is ""architecture"", it retrieves documents from the repository structure, README, and documentation. If the category is ""implementation"", it retrieves documents from the source code, documentation, and README.
+
+The specific retrieval strategies are defined in separate functions within `utils/multi_retriever.py`, such as `retrieve_repo_structure`, `retrieve_readme_first`, `retrieve_documentation`, and `retrieve_source_code`. These functions use the `vector_db` to retrieve relevant documents based on the question and category. 
+
+The file paths for these functions are `utils/query_router.py` and `utils/multi_retriever.py`."

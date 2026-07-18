@@ -116,7 +116,17 @@ def retrieve_license(vector_db, question, k=5):
         }
     )
 
-    return license_retriever.invoke(question)
+    docs = license_retriever.invoke(question)
+
+    # Many repos don't have a dedicated LICENSE file — the license section
+    # often just lives inside the README instead. Without this fallback,
+    # such repos return zero chunks for license questions even though the
+    # answer is right there, and the LLM has no choice but to say
+    # "I don't know from this codebase."
+    if not docs:
+        docs = retrieve_readme_first(vector_db, question, k=k)
+
+    return docs
 
 
 def retrieve_general(vector_db, question, k=12):
