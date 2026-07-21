@@ -1,0 +1,13 @@
+.git
+.gitignore
+venv/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+repos/
+chroma_db/
+eval/*.csv
+README.md
+CLAUDE.md

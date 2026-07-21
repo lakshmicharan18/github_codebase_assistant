@@ -1,13 +1,24 @@
-streamlit
-python-dotenv
-langchain==0.3.27
-langchain-community==0.3.27
-langchain-core==0.3.74
-langchain-groq
-langchain-huggingface
-langchain-chroma
-chromadb
-GitPython
-sentence-transformers
-langchain-text-splitters
-requests
+# CPU-only PyTorch wheels — sentence-transformers pulls in torch, and the
+# default PyPI wheel bundles CUDA libs (~3GB extra) that are dead weight on
+# CPU-only deployment targets (Streamlit Cloud, Render, Railway, etc.).
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+streamlit==1.59.2
+python-dotenv==1.2.2
+requests==2.34.2
+GitPython==3.1.53
+
+# langchain-family packages are pinned together as a mutually-compatible
+# set (all on the 1.x line) — pinning langchain/langchain-core alone while
+# leaving langchain-groq/langchain-chroma/langchain-huggingface unpinned
+# forces pip to backtrack across incompatible major versions on every install.
+langchain==1.3.14
+langchain-core==1.5.0
+langchain-groq==1.1.3
+langchain-huggingface==1.2.2
+langchain-chroma==1.1.0
+langchain-text-splitters==1.1.2
+
+chromadb==1.5.9
+torch==2.13.0
+sentence-transformers==5.6.0

@@ -259,6 +259,49 @@ The Groq LLM (Llama 3.3 70B Versatile) generates a response using only the retri
 
 ---
 
+## 🚀 Deployment
+
+### Environment variables
+
+Copy `.env.example` to `.env` and fill in real values (never commit `.env` — it's gitignored):
+
+- `GROQ_API_KEY` — used server-side for all LLM calls. If set, users never have to paste their own key. If omitted, each user is prompted for their own key in the sidebar.
+- `HF_TOKEN` — only needed if you're gated/rate-limited on Hugging Face for the embedding/reranker model downloads.
+
+### Run locally
+
+```
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+### Docker
+
+A `Dockerfile` is included (CPU-only, based on `python:3.11-slim`). This is the most portable option and works on Render, Railway, Fly.io, Google Cloud Run, Hugging Face Spaces (Docker SDK), or any container host:
+
+```
+docker build -t github-codebase-assistant .
+docker run -p 8501:8501 --env-file .env github-codebase-assistant
+```
+
+Then open http://localhost:8501.
+
+### Streamlit Community Cloud
+
+Point Streamlit Cloud at this repo/`app.py` directly — `packages.txt` (system `git`) and `runtime.txt` (Python version) are picked up automatically. Set `GROQ_API_KEY` (and `HF_TOKEN` if needed) as app secrets rather than in `.env`.
+
+### Other PaaS (Railway, Render, Heroku-style buildpacks)
+
+A `Procfile` is included for platforms that build from `requirements.txt` rather than a Dockerfile.
+
+### Notes
+
+- `repos/` and `chroma_db/` are per-session scratch directories written at runtime (see `CLAUDE.md`) — they don't need to persist across restarts, so ephemeral container storage is fine.
+- The app needs a working `git` binary on the host/container (used by `GitPython` to clone repos) — the Dockerfile and `packages.txt` both install it.
+- Embeddings/reranker models are CPU-only by default (`requirements.txt` pins `torch` from the CPU wheel index) to keep image size and cold-start time reasonable on typical PaaS free/hobby tiers.
+
+---
+
 ## 👨‍💻 Author
 
 **Lakshmi Charan Yakkala**
