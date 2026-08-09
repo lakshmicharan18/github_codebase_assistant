@@ -11,3 +11,4 @@ GitPython
 sentence-transformers
 langchain-text-splitters
 requests
+ragas==0.2.15

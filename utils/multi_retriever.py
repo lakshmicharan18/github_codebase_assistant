@@ -1,4 +1,60 @@
+import os
+import re
+
 from langchain_core.documents import Document
+
+
+# Matches bare filenames the user might type in a question, e.g. "preparation_graph.py"
+# or "README.md". Intentionally extension-based rather than tied to ALLOWED_EXTENSIONS
+# in repo_loader.py, since the question text won't include a leading path.
+FILENAME_MENTION_PATTERN = re.compile(
+    r"\b[\w-]+\.(?:py|js|jsx|ts|tsx|java|md|json|yml|yaml|toml|html|css|txt|rst)\b",
+    re.IGNORECASE
+)
+
+
+def retrieve_by_filename_mention(vector_db, question, k_per_file=6):
+    """
+    Category-based filtering alone can starve a question that names a specific
+    file (e.g. "explain preparation_graph.py") if that file's chunks don't win
+    on embedding similarity within the category's k budget. This does an exact
+    metadata lookup instead: if the question mentions a filename that matches
+    an indexed document's file_name, pull that file's chunks directly,
+    regardless of category.
+    """
+    mentioned = {m.group(0).lower() for m in FILENAME_MENTION_PATTERN.finditer(question)}
+
+    if not mentioned:
+        return []
+
+    try:
+        all_metadata = vector_db.get(include=["metadatas"]).get("metadatas", [])
+    except Exception:
+        return []
+
+    matched_sources = set()
+    for meta in all_metadata:
+        source = meta.get("source", "")
+        file_name = meta.get("file_name") or os.path.basename(source)
+        if file_name.lower() in mentioned:
+            matched_sources.add(source)
+
+    matched_docs = []
+    for source in matched_sources:
+        retriever = vector_db.as_retriever(
+            search_type="similarity",
+            search_kwargs={"k": k_per_file, "filter": {"source": source}}
+        )
+        docs = retriever.invoke(question)
+        for doc in docs:
+            # Lets the reranker guarantee these a spot in the final context
+            # even if their score alone wouldn't make the cut — an explicitly
+            # named file shouldn't lose an explanation to unrelated chunks
+            # that merely score higher.
+            doc.metadata["filename_match"] = True
+        matched_docs.extend(docs)
+
+    return matched_docs
 
 
 def get_unique_documents(documents):
@@ -151,10 +207,16 @@ def sort_documents_by_priority(documents):
 def multi_retrieve(vector_db, question, category):
     retrieved_docs = []
 
+    # Run before category-based retrieval, and independent of it: a question
+    # that names a specific file should pull that file's chunks regardless
+    # of which category the router assigned.
+    retrieved_docs.extend(retrieve_by_filename_mention(vector_db, question))
+
     if category == "architecture":
         retrieved_docs.extend(retrieve_repo_structure(vector_db, question, k=3))
-        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=4))
-        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=4))
+        retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=3))
+        retrieved_docs.extend(retrieve_documentation(vector_db, question, k=3))
+        retrieved_docs.extend(retrieve_source_code(vector_db, question, k=4))
 
     elif category == "overview":
         retrieved_docs.extend(retrieve_readme_first(vector_db, question, k=6))

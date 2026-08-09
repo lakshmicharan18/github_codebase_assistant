@@ -10,10 +10,16 @@ class DocumentReranker:
     def __init__(self, model_name=RERANKER_MODEL):
         self.model = CrossEncoder(model_name)
 
-    def rerank(self, question, documents, top_k=6):
+    def rerank(self, question, documents, top_k=6, guaranteed_filename_matches=3):
         """
-        Reranks retrieved documents based on their relevance
-        to the user's question.
+        Reranks retrieved documents based on their relevance to the user's
+        question. Chunks tagged filename_match (an explicitly named file,
+        see multi_retriever.retrieve_by_filename_mention) are guaranteed up
+        to `guaranteed_filename_matches` of the final top_k slots, even if
+        their raw score wouldn't otherwise make the cut. Without this, a
+        long file mentioned by name can lose most of its chunks to unrelated
+        but higher-scoring chunks, leaving the answer citing the right file
+        but missing most of its actual content.
         """
 
         if not documents:
@@ -37,7 +43,28 @@ class DocumentReranker:
             reverse=True
         )
 
-        return scored_documents[:top_k]
+        guaranteed_filename_matches = min(guaranteed_filename_matches, top_k)
+
+        guaranteed = [
+            doc for doc in scored_documents
+            if doc.metadata.get("filename_match")
+        ][:guaranteed_filename_matches]
+
+        guaranteed_ids = {id(doc) for doc in guaranteed}
+        remaining_slots = top_k - len(guaranteed)
+
+        fill = [
+            doc for doc in scored_documents
+            if id(doc) not in guaranteed_ids
+        ][:remaining_slots]
+
+        result = guaranteed + fill
+        result.sort(
+            key=lambda doc: doc.metadata.get("reranker_score", 0),
+            reverse=True
+        )
+
+        return result
 
 
 @st.cache_resource(show_spinner="Loading reranker model...")

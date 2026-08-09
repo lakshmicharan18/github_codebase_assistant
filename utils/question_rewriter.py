@@ -27,12 +27,17 @@ def rewrite_question(question, chat_history, groq_api_key):
 
         Rules:
         1. If the latest question is already clear, return it unchanged.
-        2. If the latest question uses words like "that", "this", "it", "there", or "recheck",
-           rewrite it using the recent conversation context.
-        3. Do not change the user's intent.
-        4. Do not add extra assumptions.
-        5. Do not answer the question.
-        6. Return only the rewritten question.
+        2. If the latest question uses words like "that", "this", "it", "there", or "recheck"
+           to refer back to something specific mentioned earlier (a file, function, concept,
+           or previous answer), rewrite it using the recent conversation context.
+        3. Generic phrases like "this project", "this codebase", "this repo", or "the project"
+           always refer to the whole indexed repository as a whole, never to a single file or
+           topic discussed earlier. Do not rewrite these using chat history, and do not narrow
+           them down to whatever file or subject was last discussed.
+        4. Do not change the user's intent.
+        5. Do not add extra assumptions.
+        6. Do not answer the question.
+        7. Return only the rewritten question.
 
         Chat history:
         {chat_history}
