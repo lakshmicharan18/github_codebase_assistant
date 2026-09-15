@@ -5,6 +5,7 @@ import shutil
 import streamlit as st
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
+from utils.bm25_retriever import attach_bm25_index
 
 
 BASE_PERSIST_DIRECTORY = "chroma_db"
@@ -63,6 +64,7 @@ def create_vector_store(chunks, session_id=None):
         collection_name=collection_name
     )
 
+    attach_bm25_index(vector_db, chunks)
     return vector_db
 
 
@@ -84,6 +86,7 @@ def load_vector_store(session_id=None):
         collection_name=collection_name
     )
 
+    attach_bm25_index(vector_db)
     return vector_db
 
 

@@ -8,9 +8,13 @@ def split_code_files(documents):
         chunk_size=1800,
         chunk_overlap=250,
         separators=[
+            # Split before decorators first so decorated definitions stay
+            # together when they fit within the existing chunk budget.
+            "\n@",
             "\nclass ",
             "\ndef ",
             "\nasync def ",
+            "\n    @",
             "\n    def ",
             "\n    async def ",
             "\n\n",

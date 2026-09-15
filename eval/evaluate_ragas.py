@@ -35,8 +35,13 @@ below).
 """
 
 import csv
+import argparse
+import ast
+import math
 import os
+from pathlib import Path
 import sys
+import tempfile
 
 from dotenv import load_dotenv
 
@@ -138,6 +143,9 @@ def run_eval():
         print("ERROR: GROQ_API_KEY not found. Set it in your .env file or environment.")
         sys.exit(1)
 
+    print("Pipeline model:", os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    print("RAGAS judge model:", os.getenv("GROQ_JUDGE_MODEL", "llama-3.1-8b-instant"))
+
     try:
         vector_db = setup_pipeline()
     except RepoValidationError as e:
@@ -178,7 +186,10 @@ def run_eval():
     # the production pipeline has already used today.
     judge_llm = LangchainLLMWrapper(ChatGroq(
         groq_api_key=groq_api_key,
-        model_name="llama-3.1-8b-instant",
+        model_name=os.getenv("GROQ_JUDGE_MODEL", "llama-3.1-8b-instant"),
+        # Reasoning and structured verdicts need room beyond the provider
+        # default. This limit applies only to offline evaluation calls.
+        max_tokens=int(os.getenv("GROQ_JUDGE_MAX_TOKENS", "8192")),
         temperature=0
     ))
     judge_embeddings = LangchainEmbeddingsWrapper(get_embedding_model())
@@ -194,7 +205,7 @@ def run_eval():
     # forces retries that eat into the timeout budget once several of
     # Faithfulness's extra calls are in flight at once. Fully serial
     # (max_workers=1) removes that contention entirely: slower overall, but
-    # every job gets a real score instead of some silently landing as NaN.
+    # reducing rate-limit contention. Failed scores are reported below.
     run_config = RunConfig(max_workers=1, timeout=180)
 
     result = evaluate(
@@ -231,6 +242,15 @@ def run_eval():
     print(f"Context Precision (retrieval quality) : {avg_precision:.3f}")
     print(f"Faithfulness       (generation quality): {avg_faithfulness:.3f}")
     print(f"Response Relevancy (generation quality): {avg_relevancy:.3f}")
+    for label, column in [
+        ("Context Precision", precision_col),
+        ("Faithfulness", faithfulness_col),
+        ("Response Relevancy", relevancy_col),
+    ]:
+        scored = int(scores_df[column].notna().sum())
+        print(f"{label}: {scored}/{len(scores_df)} questions scored")
+        if scored < len(scores_df):
+            print(f"WARNING: {label} average excludes failed scores; evaluation is incomplete.")
     print("=" * 60)
 
     print(
@@ -249,5 +269,78 @@ def run_eval():
     return scores_df
 
 
+def retry_missing_faithfulness(max_tokens=16384):
+    """Reuse saved evidence and answers; preserve every successful score."""
+    path = Path(__file__).with_name("ragas_eval_results.csv")
+    original = path.read_bytes()
+    with path.open(newline="") as handle:
+        reader = csv.DictReader(handle)
+        fields = reader.fieldnames
+        rows = list(reader)
+
+    def missing(value):
+        return not value or not math.isfinite(float(value))
+
+    pending = [i for i, row in enumerate(rows) if missing(row["faithfulness"])]
+    if not pending:
+        print("No missing faithfulness scores.")
+        return
+    judge_model = os.getenv("GROQ_JUDGE_MODEL", "llama-3.1-8b-instant")
+    print(f"Retrying {len(pending)} missing scores with {judge_model}, max_tokens={max_tokens}")
+    samples = []
+    for i in pending:
+        row = rows[i]
+        contexts = ast.literal_eval(row["retrieved_contexts"])
+        if not isinstance(contexts, list) or not all(isinstance(c, str) for c in contexts):
+            raise ValueError("Saved retrieved_contexts must be a list of strings")
+        print("Question:", row["user_input"])
+        samples.append(SingleTurnSample(
+            user_input=row["user_input"], response=row["response"],
+            retrieved_contexts=contexts,
+        ))
+    judge = LangchainLLMWrapper(ChatGroq(
+        groq_api_key=os.environ["GROQ_API_KEY"], model_name=judge_model,
+        temperature=0, max_tokens=max_tokens,
+    ))
+    result = evaluate(
+        dataset=EvaluationDataset(samples=samples), metrics=[Faithfulness()],
+        llm=judge, run_config=RunConfig(max_workers=1, timeout=300),
+    ).to_pandas()
+    updated = 0
+    for i, value in zip(pending, result["faithfulness"]):
+        if math.isfinite(float(value)):
+            rows[i]["faithfulness"] = str(float(value))
+            updated += 1
+    if not updated:
+        print("Retry did not produce a score; original CSV is unchanged.")
+        return
+    if path.read_bytes() != original:
+        raise RuntimeError("Results changed during retry; refusing to overwrite them")
+    # Unique backup and atomic replacement protect existing results.
+    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=path.name+".backup-", delete=False) as backup:
+        backup.write(original)
+        print("Backup:", backup.name)
+    with tempfile.NamedTemporaryFile(mode="w", newline="", dir=path.parent, delete=False) as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+        temporary_path = handle.name
+    os.replace(temporary_path, path)
+    print(f"Filled {updated} missing scores.")
+    for column in ["llm_context_precision_without_reference", "faithfulness", "answer_relevancy"]:
+        values = [float(row[column]) for row in rows if not missing(row[column])]
+        average = sum(values)/len(values) if values else float("nan")
+        print(f"{column}: {average:.3f} ({len(values)}/{len(rows)} scored)")
+
+
 if __name__ == "__main__":
-    run_eval()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--retry-missing-faithfulness", action="store_true")
+    parser.add_argument("--retry-max-tokens", type=int, default=16384)
+    args = parser.parse_args()
+    if args.retry_max_tokens <= 0:
+        parser.error("--retry-max-tokens must be positive")
+    if args.retry_missing_faithfulness:
+        retry_missing_faithfulness(args.retry_max_tokens)
+    else:
+        run_eval()

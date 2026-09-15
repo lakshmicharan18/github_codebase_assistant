@@ -2,6 +2,7 @@ import os
 import re
 
 from langchain_core.documents import Document
+from utils.bm25_retriever import retrieve_keywords, fuse_rankings
 
 
 # Matches bare filenames the user might type in a question, e.g. "preparation_graph.py"
@@ -59,18 +60,20 @@ def retrieve_by_filename_mention(vector_db, question, k_per_file=6):
 
 def get_unique_documents(documents):
     unique_docs = []
-    seen = set()
+    seen = {}
 
     for doc in documents:
         source = doc.metadata.get("source", "")
-        chunk_id = doc.metadata.get("chunk_id", "")
-        content_preview = doc.page_content[:100]
-
-        key = f"{source}-{chunk_id}-{content_preview}"
+        # Compare complete evidence: a shared prefix does not imply that
+        # two chunks contain the same implementation. Keep separate files
+        # distinct so citations retain their provenance.
+        key = (source, doc.page_content)
 
         if key not in seen:
-            seen.add(key)
+            seen[key] = doc
             unique_docs.append(doc)
+        elif doc.metadata.get("filename_match"):
+            seen[key].metadata["filename_match"] = True
 
     return unique_docs
 
@@ -246,6 +249,5 @@ def multi_retrieve(vector_db, question, category):
         retrieved_docs.extend(retrieve_general(vector_db, question, k=12))
 
     unique_docs = get_unique_documents(retrieved_docs)
-    sorted_docs = sort_documents_by_priority(unique_docs)
-
-    return sorted_docs[:20]
+    keyword_docs = retrieve_keywords(vector_db, question, k=8)
+    return fuse_rankings(unique_docs, keyword_docs, limit=20)

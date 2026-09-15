@@ -249,7 +249,7 @@ The Groq LLM (Llama 3.3 70B Versatile) generates a response using only the retri
 ## 📈 Future Enhancements
 
 - Parent-Child Retrieval
-- Hybrid Search (BM25 + Vector Search)
+- Further hybrid-search tuning
 - Repository Summarization
 - Mermaid Architecture Diagram Generation
 - Cross-file Execution Tracing
@@ -270,3 +270,54 @@ The Groq LLM (Llama 3.3 70B Versatile) generates a response using only the retri
 ## 📄 License
 
 This project is intended for educational and learning purposes.
+
+## Model configuration
+
+Set `GROQ_MODEL` in `.env` to select the model used for answers, routing,
+and question rewriting. Set `GROQ_JUDGE_MODEL` to select the RAGAS judge.
+Choose model IDs available to your Groq account. For example:
+
+```dotenv
+GROQ_MODEL=openai/gpt-oss-120b
+GROQ_JUDGE_MODEL=openai/gpt-oss-20b
+```
+
+Without overrides, the original Llama defaults remain in use. Restart the app
+after changing these settings. RAGAS prints both selected models at startup.
+Changing either model changes the evaluation conditions; establish a new
+baseline before attributing score differences to retrieval or prompt changes.
+
+To retry only missing faithfulness scores using saved answers and contexts:
+
+```bash
+python -m eval.evaluate_ragas --retry-missing-faithfulness
+```
+
+This uses a 16,384-token judge limit (override with `--retry-max-tokens`),
+keeps existing successful scores, and backs up the CSV before updating it.
+Use the same `GROQ_JUDGE_MODEL` as the original run. No repository indexing
+or answer generation is repeated.
+
+## BM25 keyword retrieval
+
+Search combines the existing category-based vector retrieval with a local BM25
+keyword index over code chunks and file paths. Tokenization preserves full
+identifiers and splits snake_case and camelCase names into searchable parts.
+Reciprocal rank fusion combines the ranked lists, removes duplicate evidence,
+and preserves explicitly named file candidates. The existing cross-encoder
+reranks at most 20 candidates and selects six chunks for the answer.
+
+The BM25 index is built once per vector-store instance during repository
+processing, or reconstructed from Chroma when loading an existing store. It
+is held in memory separately for each repository instance. It requires no
+additional packages or model API calls, but adds local indexing, memory, and
+keyword-search work. Reprocess your repository after restarting the app.
+
+Run focused retrieval checks with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+RAGAS evaluations use the same hybrid pipeline automatically. Quality and
+latency changes must be measured; BM25 does not guarantee higher scores.
