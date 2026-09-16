@@ -1,5 +1,6 @@
 import os
 import re
+from utils.query_intent import is_authorship_question, retrieval_question
 
 from langchain_core.documents import Document
 from utils.bm25_retriever import retrieve_keywords, fuse_rankings
@@ -208,6 +209,10 @@ def sort_documents_by_priority(documents):
 
 
 def multi_retrieve(vector_db, question, category):
+    authorship = is_authorship_question(question)
+    if authorship:
+        category = "overview"
+        question = retrieval_question(question)
     retrieved_docs = []
 
     # Run before category-based retrieval, and independent of it: a question
@@ -250,4 +255,11 @@ def multi_retrieve(vector_db, question, category):
 
     unique_docs = get_unique_documents(retrieved_docs)
     keyword_docs = retrieve_keywords(vector_db, question, k=8)
-    return fuse_rankings(unique_docs, keyword_docs, limit=20)
+    candidates = fuse_rankings(unique_docs, keyword_docs, limit=20)
+    if authorship:
+        for doc in candidates:
+            if doc.metadata.get("file_type") in {"readme", "documentation"} and re.search(
+                r"\b(?:authors?|developed by|created by|built by)\b", doc.page_content, re.IGNORECASE
+            ):
+                doc.metadata["authorship_evidence"] = True
+    return candidates

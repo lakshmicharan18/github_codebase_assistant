@@ -51,7 +51,7 @@ flowchart TD
 2. **Understand the question:** Rewrite follow-ups when needed and classify the question as overview, architecture, implementation, testing, configuration, dependency, license, or general.
 3. **Retrieve:** Use category-specific vector retrieval and exact filename lookup. BM25 independently retrieves up to eight keyword matches across the indexed repository.
 4. **Combine:** RRF combines ranked lists without comparing incompatible raw scores. Duplicate content from the same source is merged, while explicitly named file evidence is preserved within the candidate budget.
-5. **Rerank:** A cross-encoder scores at most 20 candidates and selects up to six chunks, with reserved slots for filename matches.
+5. **Rerank:** A cross-encoder scores at most 20 candidates and selects up to six chunks, with up to six reserved slots for filename matches, presented before supplemental evidence.
 6. **Answer:** The LLM receives the selected evidence and instructions to cite files, avoid unsupported claims, and identify missing information.
 
 BM25 adds local indexing, memory, and search work, with no additional model API calls. It is rebuilt when an existing Chroma store is loaded. Quality and latency improvements must be measured rather than assumed.
@@ -157,7 +157,8 @@ github-codebase-assistant/
 │   ├── reranker.py
 │   └── rag_chain.py
 ├── tests/
-│   └── test_bm25_retriever.py
+│   ├── test_bm25_retriever.py
+│   └── test_evidence_selection.py
 ├── eval/
 │   ├── golden_router_questions.py
 │   ├── golden_correctness_questions.py
@@ -170,6 +171,8 @@ github-codebase-assistant/
 ├── repos/                       # Generated repository clones
 └── chroma_db/                   # Generated vector stores
 ```
+
+The loader excludes `eval/golden_correctness_questions.py` and `eval/golden_router_questions.py` from content and structure indexing to prevent evaluation answer leakage. Other evaluation source code remains searchable. Reprocess existing repositories to remove previously indexed answer keys.
 
 ## Tests
 

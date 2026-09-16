@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A Streamlit app (`app.py`) that lets a user paste a public GitHub repo URL, clones and indexes it, and then answers natural-language questions about the codebase using a RAG pipeline backed by Groq (Llama 3.3 70B Versatile) and ChromaDB.
+A Streamlit app (`app.py`) that lets a user paste a public GitHub repo URL, clones and indexes it, and then answers natural-language questions about the codebase using a RAG pipeline backed by Groq (model selected by GROQ_MODEL, with a Llama fallback) and ChromaDB.
 
 ## Commands
 
 Run the app:
 ```
-streamlit run app.py
+python -m streamlit run app.py
 ```
 
 Run evals (each is a standalone script, never imported by `app.py`, with zero effect on live app behavior):
@@ -20,13 +20,13 @@ python -m eval.evaluate_correctness   # runs the full pipeline against eval/gold
 ```
 Both require `GROQ_API_KEY` in `.env` or the environment, and both write a CSV of results next to the script (`eval/router_eval_results.csv`, `eval/correctness_eval_results.csv`). The correctness eval clones its own throwaway copy of the repo under `repos/correctness_eval/` and deletes its vector store when done — it's isolated from real user sessions. The correctness golden set targets this repo's own README/`repo_loader.py`, so update `eval/golden_correctness_questions.py` if that content changes.
 
-There is no lint/test/build tooling configured (no pytest, no linter config) — the `eval/` scripts above are the only form of automated verification in this repo.
+Local regression tests run with `python -m unittest discover -s tests -v`. RAGAS runs with `python -m eval.evaluate_ragas`.
 
-Required env vars (`.env`, loaded via `python-dotenv`): `GROQ_API_KEY` (Groq LLM access — used server-side if set; otherwise the Streamlit sidebar asks each user for their own key), `HF_TOKEN` (Hugging Face, for the embedding/reranker models).
+Required env vars (`.env`, loaded via `python-dotenv`): `GROQ_API_KEY` (Groq LLM access — used server-side if set; otherwise the Streamlit sidebar asks each user for their own key), optional `HF_TOKEN` (Hugging Face authentication). Configure `GROQ_MODEL` for the pipeline and `GROQ_JUDGE_MODEL` for RAGAS.
 
 ## Architecture
 
-The pipeline is: clone repo → load & tag files → chunk → embed → store in Chroma → (per question) rewrite → route → multi-retrieve → dedupe → rerank → generate. Each stage is its own module under `utils/`, wired together by `app.py` (UI + orchestration) and `utils/rag_chain.py` (the per-question RAG call). Full stage-by-stage walkthrough is in README.md's "Workflow" section — read it before touching the pipeline.
+The pipeline is: clone repo → load & tag files → chunk → embed → store in Chroma → (per question) rewrite → route → vector retrieval and BM25 keyword retrieval (sequential calls) → deduplicate and combine with RRF → rerank → generate. Each stage is its own module under `utils/`, wired together by `app.py` (UI + orchestration) and `utils/rag_chain.py` (the per-question RAG call). Full stage-by-stage walkthrough is in README.md's "Retrieval workflow" section — read it before touching the pipeline.
 
 **Multi-session isolation is the load-bearing design constraint.** Every session gets a `session_id` (`st.session_state.session_id`, a UUID), and that ID scopes *everything* per-user: the clone path (`repos/<session_id>/cloned_repo`), the Chroma persist directory and collection name (`chroma_db/<session_id>/`, via `_sanitize_session_id` in `utils/vector_store.py`), and the vector-store-id used for cleanup. Concurrent users on the same server process never read or write each other's data. When adding new per-repo state, thread it through `session_id` the same way rather than using a shared/global path. Each successful "Process Repository" run also mints a *new* vector-store id (`session_id_<uuid8>`) rather than reusing the old one, because Chroma caches DB clients by path and reusing a path after a delete causes "readonly database" errors — see the comment in `app.py` around `create_vector_store` for why.
 
@@ -35,7 +35,7 @@ The pipeline is: clone repo → load & tag files → chunk → embed → store i
 **File classification drives retrieval.** `repo_loader.py`'s `get_file_type()` and `get_file_priority()` tag every loaded file with a `file_type` (readme/documentation/source_code/test/configuration/dependency/license/repo_structure) and a numeric priority. These metadata fields are the join key used throughout the rest of the pipeline:
 - `utils/code_splitter.py` picks a chunking strategy (code-aware, markdown-aware, or large-block structure splitter) based on `file_type`/extension.
 - `utils/multi_retriever.py`'s `multi_retrieve()` filters Chroma queries by `file_type` per question category (e.g. `architecture` pulls from repo_structure + readme + docs; `implementation` pulls from source_code + docs + readme).
-- `utils/rag_chain.py`'s final sort and the reranker both use `file_priority` as a tiebreaker/signal alongside the cross-encoder score.
+- `file_priority` is descriptive metadata, not a reranking tiebreaker. RRF selects up to 20 candidates; the cross-encoder ranks by relevance and reserves up to six slots for explicitly named file chunks, displayed first.
 
 If you add a new file type or category, you generally need to update all three of these files together, plus `utils/query_router.py`'s `VALID_CATEGORIES` list and prompt (the category taxonomy is duplicated as a hardcoded list there and must stay in sync with what `multi_retrieve()` handles).
 
@@ -44,6 +44,8 @@ If you add a new file type or category, you generally need to update all three o
 **License retrieval has a fallback**: `retrieve_license()` in `multi_retriever.py` falls back to README chunks if no dedicated LICENSE file matched, since many repos state their license only in the README.
 
 **`utils/rag_chain.py` has a large dead code block** (two `'''...'''`-quoted earlier versions of `create_rag_chain`) left at the bottom of the file after the string-matching router was replaced by the LLM-based one — be aware it's inert, not a second code path.
+
+Evaluation answer-key files under `eval/` are excluded from indexing to prevent answer leakage. Other evaluation source files remain searchable. The app uses `chain.invoke()` and displays the completed response; it does not stream tokens.
 
 ## Data directories
 

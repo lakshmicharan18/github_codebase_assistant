@@ -54,6 +54,16 @@ LOW_VALUE_FILES = [
 ]
 
 
+# Keep evaluation answer keys out of both vector and keyword evidence.
+# Other evaluation scripts remain searchable as ordinary source code.
+EVALUATION_ANSWER_KEYS = {"golden_correctness_questions.py", "golden_router_questions.py"}
+
+
+def is_evaluation_answer_key(relative_path):
+    parts = relative_path.replace("\\", "/").split("/")
+    return "eval" in parts[:-1] and parts[-1] in EVALUATION_ANSWER_KEYS
+
+
 def validate_github_url(repo_url):
     """
     Ensures the URL is a well-formed, public https://github.com/<owner>/<repo> URL.
@@ -227,6 +237,8 @@ def build_repo_structure_document(repo_path):
 
         for file in files:
             file_path = os.path.join(root, file)
+            if is_evaluation_answer_key(os.path.relpath(file_path, repo_path)):
+                continue
 
             if file.endswith(tuple(ALLOWED_EXTENSIONS)):
                 relative_path = os.path.relpath(file_path, repo_path)
@@ -274,6 +286,8 @@ def load_code_files(repo_path):
 
         for file in files:
             file_path = os.path.join(root, file)
+            if is_evaluation_answer_key(os.path.relpath(file_path, repo_path)):
+                continue
 
             if file.endswith(tuple(ALLOWED_EXTENSIONS)):
                 try:

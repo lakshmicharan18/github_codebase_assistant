@@ -1,4 +1,5 @@
 import os
+from utils.query_intent import is_authorship_question
 
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
@@ -18,6 +19,8 @@ VALID_CATEGORIES = [
 
 
 def route_question(question, groq_api_key):
+    if is_authorship_question(question):
+        return "overview"
     llm = ChatGroq(
         groq_api_key=groq_api_key,
         model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),

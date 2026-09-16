@@ -49,7 +49,7 @@ GOLDEN_CORRECTNESS_QUESTIONS = [
     (
         "What LLM model is used to generate the final answer?",
         [
-            "Uses Groq's Llama 3.3 70B Versatile model",
+            "Uses a Groq-hosted model selected by GROQ_MODEL, with llama-3.3-70b-versatile as the fallback; the deployed value cannot be inferred from the fallback alone",
         ],
     ),
     (
@@ -82,7 +82,7 @@ GOLDEN_CORRECTNESS_QUESTIONS = [
     (
         "Is hybrid search (BM25 + vector search) currently implemented, or planned?",
         [
-            "Hybrid search is listed as a future enhancement, not something already implemented",
+            "Hybrid search is implemented using BM25 keyword retrieval and vector retrieval, combined with reciprocal rank fusion before reranking",
         ],
     ),
     (

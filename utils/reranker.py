@@ -10,7 +10,7 @@ class DocumentReranker:
     def __init__(self, model_name=RERANKER_MODEL):
         self.model = CrossEncoder(model_name)
 
-    def rerank(self, question, documents, top_k=6, guaranteed_filename_matches=3):
+    def rerank(self, question, documents, top_k=6, guaranteed_filename_matches=6):
         """
         Reranks retrieved documents based on their relevance to the user's
         question. Chunks tagged filename_match (an explicitly named file,
@@ -50,6 +50,12 @@ class DocumentReranker:
             if doc.metadata.get("filename_match")
         ][:guaranteed_filename_matches]
 
+        # Retain up to two documentation passages with explicit authorship evidence.
+        author_docs = [doc for doc in scored_documents
+                       if doc.metadata.get("authorship_evidence")
+                       and all(doc is not saved for saved in guaranteed)]
+        guaranteed.extend(author_docs[:min(2, max(0, top_k - len(guaranteed)))])
+
         guaranteed_ids = {id(doc) for doc in guaranteed}
         remaining_slots = top_k - len(guaranteed)
 
@@ -59,10 +65,8 @@ class DocumentReranker:
         ][:remaining_slots]
 
         result = guaranteed + fill
-        result.sort(
-            key=lambda doc: doc.metadata.get("reranker_score", 0),
-            reverse=True
-        )
+        # Put the explicitly requested file before supplemental evidence.
+        # Each group is already sorted by cross-encoder relevance.
 
         return result
 
