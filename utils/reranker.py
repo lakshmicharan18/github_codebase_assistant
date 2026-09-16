@@ -52,7 +52,7 @@ class DocumentReranker:
 
         # Retain up to two documentation passages with explicit authorship evidence.
         author_docs = [doc for doc in scored_documents
-                       if doc.metadata.get("authorship_evidence")
+                       if (doc.metadata.get("authorship_evidence") or doc.metadata.get("overview_evidence"))
                        and all(doc is not saved for saved in guaranteed)]
         guaranteed.extend(author_docs[:min(2, max(0, top_k - len(guaranteed)))])
 

@@ -16,3 +16,11 @@ def retrieval_question(question):
     if is_authorship_question(question):
         return question + ' author creator developed by created by'
     return question
+
+
+def is_project_overview_question(question):
+    text = question.lower()
+    return bool(re.search(
+        r"\b(?:what problem|what does|what is|purpose|overview|summary|summarize)\b.*\b(?:project|repository|repo|codebase|app|application)\b"
+        r"|\b(?:project|repository|repo|codebase|app|application)\b.*\b(?:purpose|overview|summary)\b", text
+    ))

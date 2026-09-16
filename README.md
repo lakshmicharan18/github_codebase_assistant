@@ -49,7 +49,7 @@ flowchart TD
 
 1. **Index:** Read supported files, attach metadata, and split content into chunks. Store embeddings in ChromaDB and build a repository-specific BM25 index in memory.
 2. **Understand the question:** Rewrite follow-ups when needed and classify the question as overview, architecture, implementation, testing, configuration, dependency, license, or general.
-3. **Retrieve:** Use category-specific vector retrieval and exact filename lookup. BM25 independently retrieves up to eight keyword matches across the indexed repository.
+3. **Retrieve:** Use category-specific vector retrieval and exact filename lookup. BM25 retrieves up to eight keyword matches; overview questions restrict keyword search to README/documentation. Project-purpose questions also retain the root README introduction.
 4. **Combine:** RRF combines ranked lists without comparing incompatible raw scores. Duplicate content from the same source is merged, while explicitly named file evidence is preserved within the candidate budget.
 5. **Rerank:** A cross-encoder scores at most 20 candidates and selects up to six chunks, with up to six reserved slots for filename matches, presented before supplemental evidence.
 6. **Answer:** The LLM receives the selected evidence and instructions to cite files, avoid unsupported claims, and identify missing information.
@@ -158,7 +158,8 @@ github-codebase-assistant/
 │   └── rag_chain.py
 ├── tests/
 │   ├── test_bm25_retriever.py
-│   └── test_evidence_selection.py
+│   ├── test_evidence_selection.py
+│   └── test_overview_retrieval.py
 ├── eval/
 │   ├── golden_router_questions.py
 │   ├── golden_correctness_questions.py

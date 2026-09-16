@@ -1,9 +1,9 @@
 import os
 import re
-from utils.query_intent import is_authorship_question, retrieval_question
+from utils.query_intent import is_authorship_question, retrieval_question, is_project_overview_question
 
 from langchain_core.documents import Document
-from utils.bm25_retriever import retrieve_keywords, fuse_rankings
+from utils.bm25_retriever import retrieve_keywords, fuse_rankings, retrieve_readme_introduction
 
 
 # Matches bare filenames the user might type in a question, e.g. "preparation_graph.py"
@@ -209,6 +209,9 @@ def sort_documents_by_priority(documents):
 
 
 def multi_retrieve(vector_db, question, category):
+    overview = is_project_overview_question(question)
+    if overview:
+        category = "overview"
     authorship = is_authorship_question(question)
     if authorship:
         category = "overview"
@@ -254,8 +257,13 @@ def multi_retrieve(vector_db, question, category):
         retrieved_docs.extend(retrieve_general(vector_db, question, k=12))
 
     unique_docs = get_unique_documents(retrieved_docs)
-    keyword_docs = retrieve_keywords(vector_db, question, k=8)
+    if category == "overview":
+        keyword_docs = retrieve_keywords(vector_db, question, k=8, file_types={"readme", "documentation"})
+    else:
+        keyword_docs = retrieve_keywords(vector_db, question, k=8)
     candidates = fuse_rankings(unique_docs, keyword_docs, limit=20)
+    if overview:
+        candidates = get_unique_documents(retrieve_readme_introduction(vector_db) + candidates)[:20]
     if authorship:
         for doc in candidates:
             if doc.metadata.get("file_type") in {"readme", "documentation"} and re.search(

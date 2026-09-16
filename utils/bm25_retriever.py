@@ -29,7 +29,7 @@ class BM25Index:
                 self.postings[term].append((i, frequency))
         self.average_length = sum(self.lengths) / max(len(self.lengths), 1) or 1
 
-    def retrieve(self, question, k=8):
+    def retrieve(self, question, k=8, file_types=None):
         scores = defaultdict(float)
         count = len(self.documents)
         for term in set(tokenize(question)):
@@ -38,6 +38,8 @@ class BM25Index:
                 continue
             idf = math.log(1 + (count - len(postings) + 0.5) / (len(postings) + 0.5))
             for i, frequency in postings:
+                if file_types is not None and self.documents[i].metadata.get("file_type") not in file_types:
+                    continue
                 normalization = 1.5 * (0.25 + 0.75 * self.lengths[i] / self.average_length)
                 scores[i] += idf * frequency * 2.5 / (frequency + normalization)
         return [
@@ -56,11 +58,11 @@ def attach_bm25_index(vector_db, documents=None):
     return vector_db._bm25_index
 
 
-def retrieve_keywords(vector_db, question, k=8):
+def retrieve_keywords(vector_db, question, k=8, file_types=None):
     index = getattr(vector_db, "_bm25_index", None)
     if index is None:
         index = attach_bm25_index(vector_db)
-    return index.retrieve(question, k=k)
+    return index.retrieve(question, k=k, file_types=file_types)
 
 
 def fuse_rankings(*rankings, limit=20):
@@ -84,3 +86,17 @@ def fuse_rankings(*rankings, limit=20):
     selected = set(named)
     keys = named + [key for key in ordered if key not in selected][:max(0, limit-len(named))]
     return [documents[key] for key in keys]
+
+
+def retrieve_readme_introduction(vector_db):
+    index = getattr(vector_db, "_bm25_index", None)
+    if index is None:
+        index = attach_bm25_index(vector_db)
+    candidates = [doc for doc in index.documents
+                  if doc.metadata.get("file_type") == "readme"
+                  and doc.metadata.get("chunk_id") == 0]
+    candidates.sort(key=lambda doc: (doc.metadata.get("source", "").count("/"),
+                                     doc.metadata.get("source", "")))
+    return [Document(page_content=doc.page_content,
+                     metadata={**doc.metadata, "overview_evidence": True})
+            for doc in candidates[:1]]

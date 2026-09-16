@@ -43,7 +43,6 @@ If you add a new file type or category, you generally need to update all three o
 
 **License retrieval has a fallback**: `retrieve_license()` in `multi_retriever.py` falls back to README chunks if no dedicated LICENSE file matched, since many repos state their license only in the README.
 
-**`utils/rag_chain.py` has a large dead code block** (two `'''...'''`-quoted earlier versions of `create_rag_chain`) left at the bottom of the file after the string-matching router was replaced by the LLM-based one — be aware it's inert, not a second code path.
 
 Evaluation answer-key files under `eval/` are excluded from indexing to prevent answer leakage. Other evaluation source files remain searchable. The app uses `chain.invoke()` and displays the completed response; it does not stream tokens.
 
