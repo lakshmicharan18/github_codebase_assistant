@@ -10,7 +10,7 @@ Developed by **Yakkala Lakshmi Charan**, a student at RGUKT Nuzvid.
 
 - Public GitHub repository cloning with URL and repository-size validation.
 - Source code, documentation, configuration, and repository-structure indexing.
-- Separate code and documentation chunking, with Python decorator-aware boundaries.
+- Separate code and documentation chunking, with syntax-aware Python statement and decorator boundaries.
 - Hugging Face embeddings and persistent ChromaDB vector storage.
 - BM25 keyword search over code chunks and file paths.
 - Identifier matching for full names, `snake_case`, and `camelCase` parts.
@@ -20,7 +20,9 @@ Developed by **Yakkala Lakshmi Charan**, a student at RGUKT Nuzvid.
 - Grounding instructions that require supporting evidence and file citations.
 - Streamlit chat with rewritten questions, categories, and retrieved source previews.
 - Separate repository and vector-store paths for each browser session.
-- Standalone router, correctness, and RAGAS evaluations.
+- Personal Groq API-key fallback when the shared allowance is reached, with saved-question retry.
+- Targeted implementation evidence retrieval for configuration, embeddings, missing context, and API-key handling.
+- Standalone router, correctness, and RAGAS evaluations, plus local retrieval and UI regression tests.
 
 ## Architecture
 
@@ -51,8 +53,10 @@ flowchart TD
 2. **Understand the question:** Rewrite follow-ups when needed and classify the question as overview, architecture, implementation, testing, configuration, dependency, license, or general.
 3. **Retrieve:** Use category-specific vector retrieval and exact filename lookup. BM25 retrieves up to eight keyword matches; overview questions restrict keyword search to README/documentation. Project-purpose questions also retain the root README introduction.
 4. **Combine:** RRF combines ranked lists without comparing incompatible raw scores. Duplicate content from the same source is merged, while explicitly named file evidence is preserved within the candidate budget.
-5. **Rerank:** A cross-encoder scores at most 20 candidates and selects up to six chunks, with up to six reserved slots for filename matches, presented before supplemental evidence.
+5. **Rerank:** A cross-encoder scores at most 20 candidates and selects up to six chunks. Up to six slots are reserved for filename matches, presented first. When slots remain, up to two passages marked as authorship, overview, or targeted implementation evidence are retained before filling the remaining slots by relevance.
 6. **Answer:** The LLM receives the selected evidence and instructions to cite files, avoid unsupported claims, and identify missing information.
+
+The diagram shows data flow, not concurrent execution: vector retrieval and BM25 run sequentially.
 
 BM25 adds local indexing, memory, and search work, with no additional model API calls. It is rebuilt when an existing Chroma store is loaded. Quality and latency improvements must be measured rather than assumed.
 
@@ -122,6 +126,23 @@ Using `python -m streamlit` also avoids a stale launcher path when the environme
 
 The first run downloads embedding and reranking model weights. Reprocess the repository after restarting the app to use updated indexing logic.
 
+### Personal API key fallback
+
+The app starts with the owner's `GROQ_API_KEY`. When Groq returns a rate-limit
+error during rewriting, routing, or answer generation, it reveals a password
+field for a personal Groq key. The same fallback appears when the session
+reaches the app's 20-question shared-key allowance.
+
+Enter your key and click **Retry previous question** to continue with the saved
+conversation and indexed repository. Subsequent questions use your personal
+key for that browser session. Personal-key requests bypass the shared-key
+session allowance, but remain subject to your Groq account's limits and model
+access. Another key from the same quota-limited organization may not help.
+
+Keys are kept in Streamlit session state, not written to `.env` or chat history.
+**Reset Session** removes the personal key. **Clear Chat** retains it. If no
+owner key is configured, the personal-key field appears immediately.
+
 ### Example questions
 
 - What problem does this project solve?
@@ -137,7 +158,7 @@ Supported extensions: `.py`, `.js`, `.jsx`, `.ts`, `.tsx`, `.java`, `.html`, `.c
 
 The loader skips common generated and dependency directories such as `.git`, `node_modules`, `venv`, `.venv`, `__pycache__`, `build`, and `dist`. Repository size is checked before cloning, with a configured limit of approximately 150 MB.
 
-**Clear Chat** removes conversation history. **Reset Session** clears the session's repository, vector store, and chat state. Chat requests have a per-session limit of 20 questions per 10 minutes; this is separate from Groq's API limits.
+**Clear Chat** removes conversation history and pending questions while retaining the personal API key. **Reset Session** clears the repository, vector store, conversation, personal key, and session-limit state. The 20-question-per-10-minute allowance applies when using the shared key. Personal-key requests bypass that allowance but remain subject to Groq's limits.
 
 ## Project structure
 
@@ -152,14 +173,19 @@ github-codebase-assistant/
 │   ├── vector_store.py
 │   ├── bm25_retriever.py
 │   ├── question_rewriter.py
+│   ├── query_intent.py
 │   ├── query_router.py
 │   ├── multi_retriever.py
+│   ├── evidence_retriever.py
 │   ├── reranker.py
 │   └── rag_chain.py
 ├── tests/
+│   ├── test_api_key_fallback.py
+│   ├── test_authorship_retrieval.py
 │   ├── test_bm25_retriever.py
 │   ├── test_evidence_selection.py
-│   └── test_overview_retrieval.py
+│   ├── test_overview_retrieval.py
+│   └── test_repository_evidence.py
 ├── eval/
 │   ├── golden_router_questions.py
 │   ├── golden_correctness_questions.py
@@ -181,7 +207,32 @@ The loader excludes `eval/golden_correctness_questions.py` and `eval/golden_rout
 python -m unittest discover -s tests -v
 ```
 
-The BM25 tests cover identifier matching, empty and unmatched queries, index caching, repository isolation, metadata isolation, rank fusion, and preservation of filename matches. They run locally without Groq calls. They verify functionality rather than answer quality.
+The `unittest` suite covers:
+
+- BM25 identifier matching, empty/unmatched queries, caching, repository isolation, and rank fusion.
+- Filename prioritization, author/overview evidence retention, and evaluation answer-key exclusion.
+- Real repository-text retrieval for model configuration, missing-context instructions, and personal-key reset behavior.
+- Python chunk boundaries and the 1,800-character chunk limit.
+- Streamlit API-key fallback, saved-question retry, invalid-key handling, and the shared session allowance.
+
+These tests run without live Groq requests; UI tests simulate API errors. They verify implementation behavior and selected retrieval outcomes, not end-to-end answer accuracy.
+
+### Evidence selection and regression checks
+
+Configuration, embedding, missing-context, and API-key questions use additional
+local keyword hints to find implementation evidence without fixed repository
+paths. Up to two matching passages can be retained within the existing
+six-chunk answer budget, after named-file reservations. No extra LLM call is
+added. Python chunking preserves functions and prompt assignments that fit
+the 1,800-character budget; oversized or unparsable code uses recursive splits.
+
+`tests/test_repository_evidence.py` indexes current repository source text with
+real BM25 and verifies model configuration, abstention instructions, personal
+key reset behavior, and chunk boundaries. It complements the mocked pipeline
+and UI tests; it does not measure end-to-end answer accuracy.
+
+Reprocess repositories after deploying these changes. The chatbot reads the
+GitHub snapshot, so unpushed local updates are not part of its evidence.
 
 ## Evaluation
 
@@ -258,37 +309,3 @@ These are scores on a small question set, not overall accuracy percentages. One 
 ## License
 
 This project is intended for educational and learning purposes. That statement does not itself grant an open-source license; consult any license file in the repository for applicable terms.
-
-### Personal API key fallback
-
-The app starts with the owner's `GROQ_API_KEY`. When Groq returns a rate-limit
-error during rewriting, routing, or answer generation, it reveals a password
-field for a personal Groq key. The same fallback appears when the session
-reaches the app's 20-question shared-key allowance.
-
-Enter your key and click **Retry previous question** to continue with the saved
-conversation and indexed repository. Subsequent questions use your personal
-key for that browser session. Personal-key requests bypass the shared-key
-session allowance, but remain subject to your Groq account's limits and model
-access. Another key from the same quota-limited organization may not help.
-
-Keys are kept in Streamlit session state, not written to `.env` or chat history.
-**Reset Session** removes the personal key. **Clear Chat** retains it. If no
-owner key is configured, the personal-key field appears immediately.
-
-### Evidence selection and regression checks
-
-Configuration, embedding, missing-context, and API-key questions use additional
-local keyword hints to find implementation evidence without fixed repository
-paths. Up to two matching passages can be retained within the existing
-six-chunk answer budget, after named-file reservations. No extra LLM call is
-added. Python chunking preserves functions and prompt assignments that fit
-the 1,800-character budget; oversized or unparsable code uses recursive splits.
-
-`tests/test_repository_evidence.py` indexes current repository source text with
-real BM25 and verifies model configuration, abstention instructions, personal
-key reset behavior, and chunk boundaries. It complements the mocked pipeline
-and UI tests; it does not measure end-to-end answer accuracy.
-
-Reprocess repositories after deploying these changes. The chatbot reads the
-GitHub snapshot, so unpushed local updates are not part of its evidence.
