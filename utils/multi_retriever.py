@@ -1,3 +1,4 @@
+from utils.evidence_retriever import retrieve_implementation_evidence
 import os
 import re
 from utils.query_intent import is_authorship_question, retrieval_question, is_project_overview_question
@@ -264,6 +265,9 @@ def multi_retrieve(vector_db, question, category):
     candidates = fuse_rankings(unique_docs, keyword_docs, limit=20)
     if overview:
         candidates = get_unique_documents(retrieve_readme_introduction(vector_db) + candidates)[:20]
+    targeted = retrieve_implementation_evidence(vector_db, question)
+    if targeted:
+        candidates = get_unique_documents(targeted + candidates)[:20]
     if authorship:
         for doc in candidates:
             if doc.metadata.get("file_type") in {"readme", "documentation"} and re.search(

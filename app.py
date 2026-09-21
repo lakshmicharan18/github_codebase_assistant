@@ -5,6 +5,7 @@ import uuid
 from collections import deque
 
 import streamlit as st
+from groq import RateLimitError, AuthenticationError, PermissionDeniedError, NotFoundError, APIConnectionError, APIStatusError
 from dotenv import load_dotenv
 
 from utils.repo_loader import clone_github_repo, load_code_files, RepoValidationError
@@ -28,20 +29,18 @@ if "session_id" not in st.session_state:
 session_id = st.session_state.session_id
 session_repo_path = os.path.join("repos", session_id, "cloned_repo")
 
-# In production, set GROQ_API_KEY as a server-side environment variable so
-# users never have to paste their own key into the browser. The sidebar
-# input is kept only as a fallback for local development when no server
-# key is configured.
+# Personal credentials stay in this browser session; never change os.environ.
 SERVER_GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-
-if SERVER_GROQ_API_KEY:
-    groq_api_key = SERVER_GROQ_API_KEY
-else:
-    groq_api_key = st.sidebar.text_input("Enter Groq API Key", type="password")
-    st.sidebar.caption(
-        "No server-side GROQ_API_KEY is configured — using your own key "
-        "for this session only."
-    )
+needs_personal_key = st.session_state.get("shared_key_limited", False) or not SERVER_GROQ_API_KEY
+if needs_personal_key:
+    if st.session_state.get("shared_key_limited"):
+        st.sidebar.warning("The shared API usage allowance has been reached.")
+    st.sidebar.info("Enter your own Groq API key to continue. Your Groq account's limits still apply.")
+    st.sidebar.text_input("Your Groq API key", type="password", key="personal_groq_key")
+    st.sidebar.caption("Used only for this session. Reset Session removes it.")
+personal_key = st.session_state.get("personal_groq_key", "").strip()
+groq_api_key = personal_key or (None if needs_personal_key else SERVER_GROQ_API_KEY)
+using_personal_key = bool(personal_key)
 
 repo_url = st.text_input("Enter GitHub Repo URL")
 
@@ -84,11 +83,13 @@ def _cleanup_session_data():
 
 if st.sidebar.button("Clear Chat"):
     st.session_state.messages = []
+    st.session_state.pop("pending_question", None)
     st.rerun()
 
 if st.sidebar.button("Reset Session (clear repo + chat)"):
     _cleanup_session_data()
-    for key in ("vector_db", "documents", "chunks", "repo_url", "vector_store_id"):
+    for key in ("vector_db", "documents", "chunks", "repo_url", "vector_store_id",
+                "personal_groq_key", "shared_key_limited", "pending_question", "request_timestamps"):
         st.session_state.pop(key, None)
     st.session_state.messages = []
     st.rerun()
@@ -123,6 +124,7 @@ if st.button("Process Repository"):
                 st.session_state.chunks = chunks
                 st.session_state.repo_url = repo_url
                 st.session_state.messages = []
+                st.session_state.pop("pending_question", None)
 
             st.success("Repository indexed successfully!")
             st.write("Total files loaded:", len(documents))
@@ -141,55 +143,81 @@ if st.button("Process Repository"):
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-user_question = st.chat_input("Ask question about the codebase")
+retry = False
+if st.session_state.get("pending_question"):
+    st.info("Your previous question is saved. You can retry it after entering a key or waiting for quota to recover.")
+    retry = st.button("Retry previous question", disabled=not bool(groq_api_key))
+new_question = st.chat_input("Ask question about the codebase")
+user_question = st.session_state.get("pending_question") if retry else new_question
 
 if user_question:
-    st.session_state.messages.append({
-        "role": "user",
-        "content": user_question
-    })
-
-    st.chat_message("user").write(user_question)
+    if not retry:
+        st.session_state.messages.append({"role": "user", "content": user_question})
+        st.chat_message("user").write(user_question)
+    st.session_state.pending_question = user_question
 
     if "vector_db" not in st.session_state:
         st.warning("Please process a repository first.")
     elif not groq_api_key:
         st.warning("Please enter Groq API Key.")
-    elif not _check_rate_limit():
+    elif not using_personal_key and not _check_rate_limit():
         st.warning(
             f"You've hit the rate limit ({RATE_LIMIT_MAX_REQUESTS} questions "
             f"per {RATE_LIMIT_WINDOW_SECONDS // 60} minutes). Please wait a bit "
-            "before asking another question."
+            "or enter your own key to continue."
         )
+        st.session_state.shared_key_limited = True
+        st.rerun()
     else:
-        with st.spinner("Generating answer..."):
-            standalone_question = rewrite_question(
-                user_question,
-                st.session_state.messages,
-                groq_api_key
-            )
+        try:
+            with st.spinner("Generating answer..."):
+                standalone_question = rewrite_question(
+                    user_question,
+                    st.session_state.messages,
+                    groq_api_key
+                )
 
-            chat_history_text = ""
+                chat_history_text = ""
 
-            for msg in st.session_state.messages[-6:]:
-                chat_history_text += f"{msg['role']}: {msg['content']}\n"
+                for msg in st.session_state.messages[-6:]:
+                    chat_history_text += f"{msg['role']}: {msg['content']}\n"
 
-            chain, category, retrieved_docs, context_text = create_rag_chain(
-                st.session_state.vector_db,
-                groq_api_key,
-                standalone_question,
-                chat_history_text
-            )
+                chain, category, retrieved_docs, context_text = create_rag_chain(
+                    st.session_state.vector_db,
+                    groq_api_key,
+                    standalone_question,
+                    chat_history_text
+                )
 
-            response = chain.invoke({
-                "input": standalone_question,
-                "category": category,
-                "chat_history": chat_history_text,
-                "context": context_text
-            })
+                response = chain.invoke({
+                    "input": standalone_question,
+                    "category": category,
+                    "chat_history": chat_history_text,
+                    "context": context_text
+                })
 
-            answer = response.content
+                answer = response.content
 
+        except RateLimitError:
+            if not using_personal_key:
+                st.session_state.shared_key_limited = True
+                st.rerun()
+            st.warning("Your Groq key has reached its usage limit. Wait for quota to recover or replace it with a key from an account with available quota, then retry.")
+            st.stop()
+        except AuthenticationError:
+            st.error("Groq rejected the API key. Check your session key and retry." if using_personal_key else "The shared API key was rejected. The app owner needs to check its configuration.")
+            st.stop()
+        except (PermissionDeniedError, NotFoundError):
+            st.error("This Groq account cannot access the configured model. Check model access or ask the app owner to update GROQ_MODEL.")
+            st.stop()
+        except APIConnectionError:
+            st.warning("Could not connect to Groq. Please retry shortly.")
+            st.stop()
+        except APIStatusError:
+            st.warning("Groq could not complete the request. Please retry shortly.")
+            st.stop()
+
+        st.session_state.pop("pending_question", None)
         st.session_state.messages.append({
             "role": "assistant",
             "content": answer

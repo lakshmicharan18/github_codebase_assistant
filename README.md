@@ -244,7 +244,7 @@ These are scores on a small question set, not overall accuracy percentages. One 
 
 - Private repositories are not supported.
 - Retrieval and grounding instructions do not guarantee correct or complete answers.
-- Long definitions may still span chunks; chunking is not a full syntax-tree analysis.
+- Python chunking uses syntax-tree statement boundaries, including numbered source lines. Statements larger than 1,800 characters still require splitting.
 - Model availability and API quotas depend on the configured provider account.
 - Planned improvements include hybrid-search tuning, parent-child retrieval, resumable evaluation across all metrics, and response-latency measurement.
 
@@ -258,3 +258,37 @@ These are scores on a small question set, not overall accuracy percentages. One 
 ## License
 
 This project is intended for educational and learning purposes. That statement does not itself grant an open-source license; consult any license file in the repository for applicable terms.
+
+### Personal API key fallback
+
+The app starts with the owner's `GROQ_API_KEY`. When Groq returns a rate-limit
+error during rewriting, routing, or answer generation, it reveals a password
+field for a personal Groq key. The same fallback appears when the session
+reaches the app's 20-question shared-key allowance.
+
+Enter your key and click **Retry previous question** to continue with the saved
+conversation and indexed repository. Subsequent questions use your personal
+key for that browser session. Personal-key requests bypass the shared-key
+session allowance, but remain subject to your Groq account's limits and model
+access. Another key from the same quota-limited organization may not help.
+
+Keys are kept in Streamlit session state, not written to `.env` or chat history.
+**Reset Session** removes the personal key. **Clear Chat** retains it. If no
+owner key is configured, the personal-key field appears immediately.
+
+### Evidence selection and regression checks
+
+Configuration, embedding, missing-context, and API-key questions use additional
+local keyword hints to find implementation evidence without fixed repository
+paths. Up to two matching passages can be retained within the existing
+six-chunk answer budget, after named-file reservations. No extra LLM call is
+added. Python chunking preserves functions and prompt assignments that fit
+the 1,800-character budget; oversized or unparsable code uses recursive splits.
+
+`tests/test_repository_evidence.py` indexes current repository source text with
+real BM25 and verifies model configuration, abstention instructions, personal
+key reset behavior, and chunk boundaries. It complements the mocked pipeline
+and UI tests; it does not measure end-to-end answer accuracy.
+
+Reprocess repositories after deploying these changes. The chatbot reads the
+GitHub snapshot, so unpushed local updates are not part of its evidence.
