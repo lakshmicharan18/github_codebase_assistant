@@ -11,7 +11,7 @@ def rewrite_question(question, chat_history, groq_api_key):
 
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         temperature=0
     )
 
