@@ -33,7 +33,7 @@ def format_documents(docs):
 def create_rag_chain(vector_db, groq_api_key, question, chat_history_text=""):
     llm = ChatGroq(
         groq_api_key=groq_api_key,
-        model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model_name=os.getenv("GROQ_MODEL", "openai/gpt-oss-120b"),
         temperature=0
     )
 
